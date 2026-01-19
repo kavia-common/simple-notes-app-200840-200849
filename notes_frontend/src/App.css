@@ -1,104 +1,444 @@
-/* CSS Variables for Theme Management */
+/* Notes app theme (light) with #3b82f6 and #06b6d4 accents */
 :root {
-  /* Light theme colors */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8f9fa;
-  --text-primary: #282c34;
-  --text-secondary: #61dafb;
-  --border-color: #e9ecef;
-  --button-bg: #007bff;
-  --button-text: #ffffff;
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --text: #111827;
+  --muted: #64748b;
+  --border: #e5e7eb;
+
+  --primary: #3b82f6;
+  --success: #06b6d4;
+  --danger: #ef4444;
+
+  --shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
+  --shadow-sm: 0 6px 16px rgba(17, 24, 39, 0.08);
+
+  --radius: 14px;
+  --radius-sm: 12px;
+
+  --focus: 0 0 0 4px rgba(59, 130, 246, 0.22);
 }
 
-[data-theme="dark"] {
-  /* Dark theme colors */
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #282c34;
-  --text-primary: #ffffff;
-  --text-secondary: #61dafb;
-  --border-color: #404040;
-  --button-bg: #0056b3;
-  --button-text: #ffffff;
+* {
+  box-sizing: border-box;
 }
 
-.App {
-  text-align: center;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+.NotesApp {
   min-height: 100vh;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, rgba(6, 182, 212, 0.12), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.TopBar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(249, 250, 251, 0.72);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(229, 231, 235, 0.9);
+  padding: 22px 18px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.TopBar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
-.App-header {
-  background-color: var(--bg-secondary);
-  min-height: 100vh;
+.BrandMark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary), var(--success));
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
+}
+
+.TopBar-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.TopBar-subtitle {
+  margin: 4px 0 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.TopBar-actions {
+  max-width: 1100px;
+  margin: 14px auto 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.Main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 18px 18px 48px;
+}
+
+.MainHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.CountText {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Buttons */
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.btn-primary {
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), var(--success));
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.btn-danger {
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #fff;
+  background: linear-gradient(135deg, var(--danger), #f97316);
+}
+
+.btn-dangerGhost {
+  background: transparent;
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Meta pill */
+.MetaPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.MetaPill-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary), var(--success));
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.13);
+}
+
+.Grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.NoteCard {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: var(--radius);
+  padding: 14px 14px 12px;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.02);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  min-height: 160px;
   display: flex;
   flex-direction: column;
+}
+
+.NoteCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.NoteCard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.NoteCard-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.NoteCard-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.NoteCard-content {
+  margin: 10px 0 0 0;
+  color: rgba(17, 24, 39, 0.82);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+}
+
+.NoteCard-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.NoteCard-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Empty & alert states */
+.EmptyState {
+  margin-top: 18px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: var(--radius);
+  padding: 22px;
+  text-align: left;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.02);
+}
+
+.EmptyState-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.EmptyState-body {
+  margin: 8px 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.Alert {
+  border-radius: var(--radius);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.07);
+  padding: 12px 14px;
+}
+
+.Alert-title {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.Alert-body {
+  margin-top: 6px;
+  color: rgba(17, 24, 39, 0.85);
+  font-size: 13px;
+}
+
+/* Skeleton loading */
+.SkeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.SkeletonCard {
+  height: 170px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: linear-gradient(90deg, rgba(255,255,255,0.65), rgba(229,231,235,0.65), rgba(255,255,255,0.65));
+  background-size: 200% 100%;
+  animation: shimmer 1.15s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Modal */
+.ModalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.44);
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: var(--text-primary);
-  transition: background-color 0.3s ease;
-  position: relative;
+  padding: 18px;
+  z-index: 50;
 }
 
-.App-link {
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
+.Modal {
+  width: min(720px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-.theme-toggle {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background-color: var(--button-bg);
-  color: var(--button-text);
-  border: none;
-  border-radius: 8px;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
+.Modal[data-tone="danger"] {
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.Modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid rgba(229, 231, 235, 0.85);
+}
+
+.Modal-title {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.IconButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.9);
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(17, 24, 39, 0.8);
 }
 
-.theme-toggle:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-  opacity: 0.9;
+.IconButton:hover {
+  box-shadow: var(--shadow-sm);
 }
 
-.theme-toggle:active {
-  transform: translateY(0);
+.IconButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.Modal-body {
+  padding: 14px;
+}
+
+/* Form */
+.Form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.Field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.Field-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.Input,
+.Textarea {
+  width: 100%;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #fff;
+  color: var(--text);
+}
+
+.Input:focus,
+.Textarea:focus {
+  outline: none;
+  box-shadow: var(--focus);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.Textarea {
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.45;
+}
+
+.Form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.Confirm-text {
+  margin: 0 0 10px 0;
+  color: rgba(17, 24, 39, 0.85);
+}
+
+/* Responsive */
+@media (max-width: 980px) {
+  .Grid,
+  .SkeletonGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
-/* Responsive design for mobile */
-@media (max-width: 768px) {
-  .theme-toggle {
-    top: 10px;
-    right: 10px;
-    padding: 8px 16px;
-    font-size: 12px;
+@media (max-width: 640px) {
+  .TopBar-actions {
+    justify-content: flex-start;
+  }
+
+  .Grid,
+  .SkeletonGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .NoteCard-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
