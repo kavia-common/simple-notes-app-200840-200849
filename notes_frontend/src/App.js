@@ -13,23 +13,23 @@ import "./App.css";
 function App() {
   const { notesUrl, apiConfigured } = useMemo(() => {
     // Build (env-driven): `${REACT_APP_BACKEND_URL}${REACT_APP_API_BASE}/notes`
-    // Avoid double slashes regardless of env formatting.
-    // Examples:
-    // - REACT_APP_BACKEND_URL="http://localhost:5001", REACT_APP_API_BASE="/api"
-    // - REACT_APP_BACKEND_URL="https://example.com/", REACT_APP_API_BASE="api/"
-    const rawBackend = (process.env.REACT_APP_BACKEND_URL || "").trim();
-    const rawApiBase = (process.env.REACT_APP_API_BASE || "").trim();
+    // Requirements:
+    // - REACT_APP_BACKEND_URL is the origin (e.g., "http://localhost:5001")
+    // - REACT_APP_API_BASE is the base path (e.g., "/api")
+    // - Trim whitespace, ensure single slashes between components, and NO trailing slash at end.
+    const rawOrigin = (process.env.REACT_APP_BACKEND_URL || "").trim();
+    const rawBase = (process.env.REACT_APP_API_BASE || "").trim();
 
-    const backend = rawBackend.replace(/\/+$/, ""); // remove trailing slash(es)
-    const apiBase = rawApiBase
-      ? `/${rawApiBase.replace(/^\/+/, "").replace(/\/+$/, "")}` // ensure single leading slash, no trailing slash
+    const origin = rawOrigin.replace(/\/+$/, ""); // no trailing slash
+    const base = rawBase
+      ? `/${rawBase.replace(/^\/+/, "").replace(/\/+$/, "")}` // exactly one leading slash, no trailing slash
       : "";
 
-    const configured = Boolean(backend) && Boolean(apiBase);
+    const configured = Boolean(origin) && Boolean(base);
 
     return {
       apiConfigured: configured,
-      notesUrl: configured ? `${backend}${apiBase}/notes` : "",
+      notesUrl: configured ? `${origin}${base}/notes` : "",
     };
   }, []);
 
@@ -45,6 +45,13 @@ function App() {
   const [draft, setDraft] = useState({ title: "", content: "" });
 
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // Log computed URL once on mount for easier diagnosis (per requirements).
+  useEffect(() => {
+    // Intentionally log even if empty (helps confirm env wiring).
+    console.log("[NotesApp] Computed notesUrl:", notesUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load notes on first render
   useEffect(() => {
@@ -529,6 +536,11 @@ async function loadNotesFromApiOrFallback({ notesUrl }) {
     if (isNetworkUnreachableError(err)) {
       return { notes: loadLocalNotesReadOnly(), usingFallback: true };
     }
+
+    // Ensure the computed URL is visible in any non-network error surfaced to the user too.
+    if (err instanceof Error) {
+      err.message = `${err.message} (URL: ${notesUrl})`;
+    }
     throw err;
   }
 }
@@ -549,8 +561,13 @@ async function createNoteViaApi({ notesUrl, note }) {
     if (isNetworkUnreachableError(err)) {
       // Per requirements: localStorage is read-only fallback; do not create locally if backend is down.
       throw new Error(
-        `Backend is unreachable. Cannot create notes while offline. (Tried: ${notesUrl})`
+        `Backend is unreachable. Cannot create notes while offline. (URL: ${notesUrl})`
       );
+    }
+
+    // Surface URL for easier diagnosis on any other failure as well.
+    if (err instanceof Error) {
+      err.message = `${err.message} (URL: ${notesUrl})`;
     }
     throw err;
   }
