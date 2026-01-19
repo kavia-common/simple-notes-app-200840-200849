@@ -5,24 +5,38 @@ import "./App.css";
  * Notes app main component.
  * - Shows a list of notes in card layout
  * - Allows adding/editing via a modal dialog
- * - Allows deleting notes
- * - Persists via API when available, else falls back to localStorage
+ * - Allows deleting notes (UI-only when backend doesn't support it)
+ * - Persists via backend API (GET/POST) when reachable; uses localStorage as read-only fallback for listing only
  */
 
 // PUBLIC_INTERFACE
 function App() {
-  const apiBase = useMemo(() => {
-    // Prefer REACT_APP_API_BASE, fallback to REACT_APP_BACKEND_URL.
-    // Do not hardcode URLs; keep env-driven.
-    const base =
-      process.env.REACT_APP_API_BASE ||
-      process.env.REACT_APP_BACKEND_URL ||
-      "";
-    return (base || "").replace(/\/$/, "");
+  const { notesUrl, apiConfigured } = useMemo(() => {
+    // Build: {REACT_APP_BACKEND_URL}{REACT_APP_API_BASE}/notes
+    // Examples:
+    // - REACT_APP_BACKEND_URL="http://localhost:8000", REACT_APP_API_BASE="/api"
+    // - REACT_APP_BACKEND_URL="https://example.com", REACT_APP_API_BASE="/api"
+    const backend = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+    const apiBase = process.env.REACT_APP_API_BASE || "";
+
+    const basePath = apiBase
+      ? apiBase.startsWith("/") ? apiBase : `/${apiBase}`
+      : "";
+
+    const configured = Boolean(backend) && Boolean(basePath);
+
+    return {
+      apiConfigured: configured,
+      notesUrl: configured ? `${backend}${basePath}/notes` : "",
+    };
   }, []);
 
   const [notes, setNotes] = useState([]);
-  const [status, setStatus] = useState({ loading: true, error: "" });
+  const [status, setStatus] = useState({
+    loading: true,
+    error: "",
+    usingFallback: false,
+  });
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -35,20 +49,24 @@ function App() {
     let cancelled = false;
 
     async function load() {
-      setStatus({ loading: true, error: "" });
+      setStatus({ loading: true, error: "", usingFallback: false });
       try {
-        const loaded = await loadNotes({ apiBase });
+        const loaded = await loadNotesFromApiOrFallback({ notesUrl });
         if (!cancelled) {
-          setNotes(loaded);
-          setStatus({ loading: false, error: "" });
+          setNotes(loaded.notes);
+          setStatus({
+            loading: false,
+            error: "",
+            usingFallback: loaded.usingFallback,
+          });
         }
       } catch (e) {
         if (!cancelled) {
           setNotes([]);
           setStatus({
             loading: false,
-            error:
-              e instanceof Error ? e.message : "Failed to load notes.",
+            error: e instanceof Error ? e.message : "Failed to load notes.",
+            usingFallback: false,
           });
         }
       }
@@ -58,7 +76,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [apiBase]);
+  }, [notesUrl]);
 
   function openNewNote() {
     setEditingId(null);
@@ -67,6 +85,16 @@ function App() {
   }
 
   function openEdit(note) {
+    // Backend for this subtask only supports GET/POST.
+    // Keep editor UI for local-only / future extension, but block editing when API is configured.
+    if (apiConfigured) {
+      setStatus((s) => ({
+        ...s,
+        error: "Editing notes is not supported by the current backend API (GET/POST only).",
+      }));
+      return;
+    }
+
     setEditingId(note.id);
     setDraft({ title: note.title ?? "", content: note.content ?? "" });
     setIsEditorOpen(true);
@@ -98,50 +126,38 @@ function App() {
       return;
     }
 
-    setStatus({ loading: true, error: "" });
+    // For this subtask we only persist "create" to backend.
+    if (editingId) {
+      setStatus((s) => ({
+        ...s,
+        error: "Editing notes is not supported by the current backend API (GET/POST only).",
+      }));
+      return;
+    }
+
+    setStatus({ loading: true, error: "", usingFallback: status.usingFallback });
 
     try {
-      if (editingId) {
-        const updated = await updateNote({
-          apiBase,
-          id: editingId,
-          patch: { title: draft.title, content: draft.content },
-        });
-        setNotes((prev) =>
-          prev.map((n) => (n.id === updated.id ? updated : n))
-        );
-      } else {
-        const created = await createNote({
-          apiBase,
-          note: { title: draft.title, content: draft.content },
-        });
-        setNotes((prev) => [created, ...prev]);
-      }
-      setStatus({ loading: false, error: "" });
+      const created = await createNoteViaApi({ notesUrl, note: { title: draft.title, content: draft.content } });
+      setNotes((prev) => [created, ...prev]);
+      setStatus({ loading: false, error: "", usingFallback: false });
       closeEditor();
     } catch (e2) {
       setStatus({
         loading: false,
-        error:
-          e2 instanceof Error ? e2.message : "Failed to save note.",
+        error: e2 instanceof Error ? e2.message : "Failed to save note.",
+        usingFallback: status.usingFallback,
       });
     }
   }
 
-  async function handleDeleteConfirmed(id) {
-    setStatus({ loading: true, error: "" });
-    try {
-      await deleteNote({ apiBase, id });
-      setNotes((prev) => prev.filter((n) => n.id !== id));
-      setStatus({ loading: false, error: "" });
-      setConfirmDeleteId(null);
-    } catch (e) {
-      setStatus({
-        loading: false,
-        error:
-          e instanceof Error ? e.message : "Failed to delete note.",
-      });
-    }
+  async function handleDeleteConfirmed() {
+    // Backend for this subtask doesn't support delete; keep UI but report a friendly error.
+    setStatus((s) => ({
+      ...s,
+      error: "Deleting notes is not supported by the current backend API (GET/POST only).",
+    }));
+    setConfirmDeleteId(null);
   }
 
   const selectedForDelete =
@@ -154,9 +170,7 @@ function App() {
           <div className="BrandMark" aria-hidden="true" />
           <div>
             <h1 className="TopBar-title">Notes</h1>
-            <p className="TopBar-subtitle">
-              Add, edit, and delete simple notes.
-            </p>
+            <p className="TopBar-subtitle">Add simple notes.</p>
           </div>
         </div>
 
@@ -179,7 +193,11 @@ function App() {
           <div className="MetaPill" title="Storage mode">
             <span className="MetaPill-dot" aria-hidden="true" />
             <span className="MetaPill-text">
-              {apiBase ? "API-first (fallback to local)" : "Local storage"}
+              {apiConfigured
+                ? status.usingFallback
+                  ? "Backend unreachable — showing local cached notes"
+                  : "Backend API"
+                : "Local storage (no API configured)"}
             </span>
           </div>
 
@@ -197,9 +215,7 @@ function App() {
         ) : notes.length === 0 ? (
           <div className="EmptyState">
             <h2 className="EmptyState-title">No notes yet</h2>
-            <p className="EmptyState-body">
-              Create your first note to get started.
-            </p>
+            <p className="EmptyState-body">Create your first note to get started.</p>
             <button className="btn btn-primary" onClick={openNewNote}>
               Create a note
             </button>
@@ -217,6 +233,12 @@ function App() {
                       className="btn btn-ghost"
                       onClick={() => openEdit(note)}
                       aria-label={`Edit note ${note.title || ""}`.trim()}
+                      disabled={apiConfigured}
+                      title={
+                        apiConfigured
+                          ? "Editing not supported by backend API (GET/POST only)"
+                          : "Edit note"
+                      }
                     >
                       Edit
                     </button>
@@ -224,6 +246,12 @@ function App() {
                       className="btn btn-dangerGhost"
                       onClick={() => setConfirmDeleteId(note.id)}
                       aria-label={`Delete note ${note.title || ""}`.trim()}
+                      disabled={apiConfigured}
+                      title={
+                        apiConfigured
+                          ? "Deleting not supported by backend API (GET/POST only)"
+                          : "Delete note"
+                      }
                     >
                       Delete
                     </button>
@@ -233,12 +261,12 @@ function App() {
                 <p className="NoteCard-content">
                   {note.content?.trim()
                     ? note.content
-                    : "No content. Click edit to add details."}
+                    : "No content. Create a new note to add details."}
                 </p>
 
                 <div className="NoteCard-footer">
-                  <span className="NoteCard-date" title="Last updated">
-                    Updated {formatRelativeDate(note.updatedAt)}
+                  <span className="NoteCard-date" title="Created at">
+                    {note.createdAt ? `Created ${formatRelativeDate(note.createdAt)}` : "—"}
                   </span>
                 </div>
               </article>
@@ -255,9 +283,7 @@ function App() {
               <input
                 className="Input"
                 value={draft.title}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, title: e.target.value }))
-                }
+                onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
                 placeholder="e.g., Shopping list"
                 maxLength={120}
                 autoFocus
@@ -269,57 +295,51 @@ function App() {
               <textarea
                 className="Textarea"
                 value={draft.content}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, content: e.target.value }))
-                }
+                onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
                 placeholder="Write something..."
                 rows={8}
               />
             </label>
 
             <div className="Form-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={closeEditor}
-              >
+              <button type="button" className="btn btn-ghost" onClick={closeEditor}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
+              <button type="submit" className="btn btn-primary" disabled={!apiConfigured}>
                 Save
               </button>
             </div>
+
+            {!apiConfigured ? (
+              <p className="Confirm-text" style={{ marginTop: 10 }}>
+                Backend API is not configured. Set <code>REACT_APP_BACKEND_URL</code> and{" "}
+                <code>REACT_APP_API_BASE</code> to enable saving.
+              </p>
+            ) : null}
           </form>
         </Modal>
       ) : null}
 
       {selectedForDelete ? (
-        <Modal
-          onClose={() => setConfirmDeleteId(null)}
-          title="Delete note?"
-          tone="danger"
-        >
+        <Modal onClose={() => setConfirmDeleteId(null)} title="Delete note?" tone="danger">
           <div className="Confirm">
             <p className="Confirm-text">
               This will permanently delete{" "}
               <strong>{selectedForDelete.title?.trim() || "Untitled"}</strong>.
             </p>
             <div className="Form-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setConfirmDeleteId(null)}
-              >
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmDeleteId(null)}>
                 Cancel
               </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => handleDeleteConfirmed(selectedForDelete.id)}
-              >
+              <button type="button" className="btn btn-danger" onClick={handleDeleteConfirmed}>
                 Delete
               </button>
             </div>
+            {apiConfigured ? (
+              <p className="Confirm-text" style={{ marginTop: 10 }}>
+                Delete is currently disabled because the backend API only supports GET/POST.
+              </p>
+            ) : null}
           </div>
         </Modal>
       ) : null}
@@ -380,196 +400,126 @@ function formatRelativeDate(iso) {
 
 /**
  * ---------------------------
- * Data layer (API -> fallback)
+ * Data layer (backend + fallback)
  * ---------------------------
  *
- * The backend container is not currently part of this workspace.
- * We attempt API calls using env base URL, and if they fail, we
- * transparently fall back to localStorage.
+ * Requirements:
+ * - Use env-driven URL: GET {REACT_APP_BACKEND_URL}{REACT_APP_API_BASE}/notes
+ * - POST to the same path with JSON {title, content}
+ * - localStorage is read-only fallback only when backend is unreachable
  */
 
 const LS_KEY = "simple-notes-app.notes.v1";
-
-function generateId() {
-  // Good enough for local-only IDs (no auth, no multi-user constraints).
-  return `note_${Math.random().toString(16).slice(2)}_${Date.now()}`;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
 
 function normalizeNote(raw) {
   return {
     id: String(raw.id),
     title: String(raw.title ?? ""),
     content: String(raw.content ?? ""),
-    updatedAt: String(raw.updatedAt ?? raw.updated_at ?? nowIso()),
-    createdAt: String(raw.createdAt ?? raw.created_at ?? nowIso()),
+    createdAt: String(raw.created_at ?? raw.createdAt ?? ""),
   };
 }
 
-function loadLocalNotes() {
-  const raw = window.localStorage.getItem(LS_KEY);
-  if (!raw) return [];
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) return [];
-  return parsed.map(normalizeNote).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+function loadLocalNotesReadOnly() {
+  try {
+    const raw = window.localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Older local cache may have updatedAt/createdAt; accept and normalize.
+    return parsed
+      .map((n) => ({
+        id: String(n.id),
+        title: String(n.title ?? ""),
+        content: String(n.content ?? ""),
+        createdAt: String(n.createdAt ?? n.created_at ?? n.updatedAt ?? ""),
+      }))
+      .filter((n) => n.id);
+  } catch {
+    return [];
+  }
 }
 
-function saveLocalNotes(nextNotes) {
-  window.localStorage.setItem(LS_KEY, JSON.stringify(nextNotes));
+function saveLocalNotesCache(notes) {
+  try {
+    window.localStorage.setItem(LS_KEY, JSON.stringify(notes));
+  } catch {
+    // Ignore cache write failures (private mode / quota).
+  }
 }
 
-async function tryApiFetch(url, options) {
-  const res = await fetch(url, options);
-  // Treat non-2xx as errors to allow fallback.
+function isNetworkUnreachableError(err) {
+  // fetch() throws TypeError on network failures
+  return err instanceof TypeError;
+}
+
+// PUBLIC_INTERFACE
+async function listNotesFromBackend(notesUrl) {
+  /** List notes from backend Notes API. */
+  const res = await fetch(notesUrl, { method: "GET" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
-      `API error (${res.status})${text ? `: ${text}` : ""}`.trim()
-    );
+    throw new Error(`Failed to load notes (${res.status})${text ? `: ${text}` : ""}`);
   }
-  // 204 no content
-  if (res.status === 204) return null;
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) {
-    // Backend might not exist / unexpected content; treat as failure to enable fallback.
-    const text = await res.text().catch(() => "");
-    throw new Error(`API returned non-JSON response.${text ? ` ${text}` : ""}`);
-  }
-  return res.json();
+  const json = await res.json();
+  if (!Array.isArray(json)) return [];
+  return json.map(normalizeNote);
 }
 
-async function apiListNotes(apiBase) {
-  // Expected endpoints (conventional):
-  // GET {apiBase}/notes -> [{id,title,content,createdAt,updatedAt}]
-  return tryApiFetch(`${apiBase}/notes`, { method: "GET" });
-}
-
-async function apiCreateNote(apiBase, note) {
-  // POST {apiBase}/notes {title,content}
-  return tryApiFetch(`${apiBase}/notes`, {
+// PUBLIC_INTERFACE
+async function createNoteOnBackend(notesUrl, note) {
+  /** Create a note via backend Notes API. */
+  const res = await fetch(notesUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(note),
+    body: JSON.stringify({ title: note.title, content: note.content }),
   });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Failed to create note (${res.status})${text ? `: ${text}` : ""}`);
+  }
+  const json = await res.json();
+  return normalizeNote(json);
 }
 
-async function apiUpdateNote(apiBase, id, patch) {
-  // PUT/PATCH {apiBase}/notes/:id
-  // We'll try PATCH first.
+async function loadNotesFromApiOrFallback({ notesUrl }) {
+  if (!notesUrl) {
+    return { notes: loadLocalNotesReadOnly(), usingFallback: true };
+  }
+
   try {
-    return await tryApiFetch(`${apiBase}/notes/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-  } catch {
-    return tryApiFetch(`${apiBase}/notes/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-  }
-}
-
-async function apiDeleteNote(apiBase, id) {
-  // DELETE {apiBase}/notes/:id
-  return tryApiFetch(`${apiBase}/notes/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-}
-
-async function loadNotes({ apiBase }) {
-  if (apiBase) {
-    try {
-      const apiNotes = await apiListNotes(apiBase);
-      const normalized = Array.isArray(apiNotes)
-        ? apiNotes.map(normalizeNote)
-        : [];
-      // Keep a local cache so if API goes down later we still have data.
-      saveLocalNotes(normalized);
-      return normalized.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-    } catch {
-      // Fallback
-      return loadLocalNotes();
+    const backendNotes = await listNotesFromBackend(notesUrl);
+    // Cache latest backend state for fallback display if backend goes down later.
+    saveLocalNotesCache(backendNotes);
+    return { notes: backendNotes, usingFallback: false };
+  } catch (err) {
+    // Only fallback when backend is unreachable (network error).
+    if (isNetworkUnreachableError(err)) {
+      return { notes: loadLocalNotesReadOnly(), usingFallback: true };
     }
+    throw err;
   }
-  return loadLocalNotes();
 }
 
-async function createNote({ apiBase, note }) {
-  if (apiBase) {
-    try {
-      const created = await apiCreateNote(apiBase, note);
-      const normalized = normalizeNote(created);
-      // Update local cache
-      const existing = loadLocalNotes();
-      const next = [normalized, ...existing.filter((n) => n.id !== normalized.id)];
-      saveLocalNotes(next);
-      return normalized;
-    } catch {
-      // fallback
-    }
+async function createNoteViaApi({ notesUrl, note }) {
+  if (!notesUrl) {
+    throw new Error("Backend API is not configured.");
   }
 
-  const newNote = normalizeNote({
-    id: generateId(),
-    title: note.title ?? "",
-    content: note.content ?? "",
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
-  });
-  const existing = loadLocalNotes();
-  const next = [newNote, ...existing];
-  saveLocalNotes(next);
-  return newNote;
-}
-
-async function updateNote({ apiBase, id, patch }) {
-  if (apiBase) {
-    try {
-      const updated = await apiUpdateNote(apiBase, id, patch);
-      const normalized = normalizeNote(updated);
-      const existing = loadLocalNotes();
-      const next = existing.map((n) => (n.id === id ? normalized : n));
-      saveLocalNotes(next);
-      return normalized;
-    } catch {
-      // fallback
+  try {
+    const created = await createNoteOnBackend(notesUrl, note);
+    // Update cache on success.
+    const existing = loadLocalNotesReadOnly();
+    const next = [created, ...existing.filter((n) => n.id !== created.id)];
+    saveLocalNotesCache(next);
+    return created;
+  } catch (err) {
+    if (isNetworkUnreachableError(err)) {
+      // Per requirements: localStorage is read-only fallback; do not create locally if backend is down.
+      throw new Error("Backend is unreachable. Cannot create notes while offline.");
     }
+    throw err;
   }
-
-  const existing = loadLocalNotes();
-  const found = existing.find((n) => n.id === id);
-  if (!found) throw new Error("Note not found.");
-  const updatedLocal = normalizeNote({
-    ...found,
-    ...patch,
-    updatedAt: nowIso(),
-  });
-  const next = existing.map((n) => (n.id === id ? updatedLocal : n));
-  saveLocalNotes(next);
-  return updatedLocal;
-}
-
-async function deleteNote({ apiBase, id }) {
-  if (apiBase) {
-    try {
-      await apiDeleteNote(apiBase, id);
-      const existing = loadLocalNotes();
-      const next = existing.filter((n) => n.id !== id);
-      saveLocalNotes(next);
-      return;
-    } catch {
-      // fallback
-    }
-  }
-
-  const existing = loadLocalNotes();
-  const next = existing.filter((n) => n.id !== id);
-  saveLocalNotes(next);
 }
 
 export default App;
