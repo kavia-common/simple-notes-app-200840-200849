@@ -12,22 +12,24 @@ import "./App.css";
 // PUBLIC_INTERFACE
 function App() {
   const { notesUrl, apiConfigured } = useMemo(() => {
-    // Build: {REACT_APP_BACKEND_URL}{REACT_APP_API_BASE}/notes
+    // Build (env-driven): `${REACT_APP_BACKEND_URL}${REACT_APP_API_BASE}/notes`
+    // Avoid double slashes regardless of env formatting.
     // Examples:
-    // - REACT_APP_BACKEND_URL="http://localhost:8000", REACT_APP_API_BASE="/api"
-    // - REACT_APP_BACKEND_URL="https://example.com", REACT_APP_API_BASE="/api"
-    const backend = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
-    const apiBase = process.env.REACT_APP_API_BASE || "";
+    // - REACT_APP_BACKEND_URL="http://localhost:5001", REACT_APP_API_BASE="/api"
+    // - REACT_APP_BACKEND_URL="https://example.com/", REACT_APP_API_BASE="api/"
+    const rawBackend = (process.env.REACT_APP_BACKEND_URL || "").trim();
+    const rawApiBase = (process.env.REACT_APP_API_BASE || "").trim();
 
-    const basePath = apiBase
-      ? apiBase.startsWith("/") ? apiBase : `/${apiBase}`
+    const backend = rawBackend.replace(/\/+$/, ""); // remove trailing slash(es)
+    const apiBase = rawApiBase
+      ? `/${rawApiBase.replace(/^\/+/, "").replace(/\/+$/, "")}` // ensure single leading slash, no trailing slash
       : "";
 
-    const configured = Boolean(backend) && Boolean(basePath);
+    const configured = Boolean(backend) && Boolean(apiBase);
 
     return {
       apiConfigured: configured,
-      notesUrl: configured ? `${backend}${basePath}/notes` : "",
+      notesUrl: configured ? `${backend}${apiBase}/notes` : "",
     };
   }, []);
 
@@ -449,17 +451,39 @@ function saveLocalNotesCache(notes) {
 }
 
 function isNetworkUnreachableError(err) {
-  // fetch() throws TypeError on network failures
+  // fetch() throws TypeError on network failures (DNS, connection refused, CORS-blocked, etc.)
   return err instanceof TypeError;
+}
+
+async function safeReadText(res) {
+  try {
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
+function formatHttpError({ url, status, statusText, bodyText }) {
+  const parts = [`Request failed (${status}${statusText ? ` ${statusText}` : ""})`];
+  if (url) parts.push(`URL: ${url}`);
+  if (bodyText) parts.push(`Body: ${bodyText}`);
+  return parts.join(" — ");
 }
 
 // PUBLIC_INTERFACE
 async function listNotesFromBackend(notesUrl) {
   /** List notes from backend Notes API. */
-  const res = await fetch(notesUrl, { method: "GET" });
+  const res = await fetch(notesUrl, { method: "GET", mode: "cors" });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Failed to load notes (${res.status})${text ? `: ${text}` : ""}`);
+    const text = await safeReadText(res);
+    throw new Error(
+      formatHttpError({
+        url: notesUrl,
+        status: res.status,
+        statusText: res.statusText,
+        bodyText: text,
+      })
+    );
   }
   const json = await res.json();
   if (!Array.isArray(json)) return [];
@@ -471,12 +495,20 @@ async function createNoteOnBackend(notesUrl, note) {
   /** Create a note via backend Notes API. */
   const res = await fetch(notesUrl, {
     method: "POST",
+    mode: "cors",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ title: note.title, content: note.content }),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Failed to create note (${res.status})${text ? `: ${text}` : ""}`);
+    const text = await safeReadText(res);
+    throw new Error(
+      formatHttpError({
+        url: notesUrl,
+        status: res.status,
+        statusText: res.statusText,
+        bodyText: text,
+      })
+    );
   }
   const json = await res.json();
   return normalizeNote(json);
@@ -516,7 +548,9 @@ async function createNoteViaApi({ notesUrl, note }) {
   } catch (err) {
     if (isNetworkUnreachableError(err)) {
       // Per requirements: localStorage is read-only fallback; do not create locally if backend is down.
-      throw new Error("Backend is unreachable. Cannot create notes while offline.");
+      throw new Error(
+        `Backend is unreachable. Cannot create notes while offline. (Tried: ${notesUrl})`
+      );
     }
     throw err;
   }
